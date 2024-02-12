@@ -30,3 +30,17 @@ import numpy as np
 # print(a)
 # a[:6] = np.roll(a[:6], 1)
 # print(a)
+
+class Config:
+    params = {
+        "a": 5,
+        "b": 10
+    }
+
+class Test:
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+t = Test(**Config.params)
+print(t.a, t.b)

@@ -1,18 +1,18 @@
 import sys
 
-import gymnasium
-from gymnasium import spaces
+import gymnasium as gym
+from gymnasium import spaces, register
 import numpy as np
 
 
-class PieGameEnv(gymnasium.Env):
+class PieMakerEnv(gym.Env):
     ILLEGAL_ACTION_REWARD = -100
     DISCARD_REWARD = 0
     ROTATE_REWARD = 0
     TRANSFER_BASE_REWARD = 0  # additional fixed reward for successful transfers
 
     def __init__(self):
-        super(PieGameEnv, self).__init__()
+        super(PieMakerEnv, self).__init__()
         # global limits for space definitions
         self.maxS = 6
         self.maxT = 6
@@ -54,15 +54,15 @@ class PieGameEnv(gymnasium.Env):
         # print("Flattened observation space dimensions = ", spaces.flatdim(self.raw_observation_space))
 
         self.state = None
-        self.target_flavor = None   # target plate flavors: [1, self.C] = Single flavor, -1 = Mixed flavors, 0 = Empty
+        self.target_flavor = None  # target plate flavors: [1, self.C] = Single flavor, -1 = Mixed flavors, 0 = Empty
         self.turns = 0
 
     def step(self, action):
+        # Returns observation, reward, terminated, truncated, info
         # Implement the logic to handle an action
         self.turns += 1
         # Update the state, calculate the reward, and check if the episode is done
         reward = 0
-        info = {}
 
         # translate and output to console for tester interaction
         non_target_a2s = ["D", "R", "L"]
@@ -74,11 +74,11 @@ class PieGameEnv(gymnasium.Env):
         s = action[0] - 1  # action[0] ~ [1,6] but s: [0,5]
 
         if s >= self.S:
-            return self.state, PieGameEnv.ILLEGAL_ACTION_REWARD, True, {"TotalTurns": self.turns,
-                                                                        "TerminationReason": f"Invalid source plate {s}"}
+            return self.state, PieMakerEnv.ILLEGAL_ACTION_REWARD, False, True, {"TotalTurns": self.turns,
+                                                                                "Status": f"Truncated: Invalid source plate {s}"}
         # Action: s D
         if a2 == "D":
-            reward += PieGameEnv.DISCARD_REWARD
+            reward += PieMakerEnv.DISCARD_REWARD
         # Action: s R
         elif a2 == "R":
             self.sources[s][:self.N] = np.roll(self.sources[s][:self.N], -1)
@@ -89,11 +89,11 @@ class PieGameEnv(gymnasium.Env):
         else:
             t = action[1] - 1
             if t >= self.T:
-                return self.state, PieGameEnv.ILLEGAL_ACTION_REWARD, True, {"TotalTurns": self.turns,
-                                                                            "TerminationReason": f"Invalid target plate {t}"}
+                return self.state, PieMakerEnv.ILLEGAL_ACTION_REWARD, False, True, {"TotalTurns": self.turns,
+                                                                                    "Status": f"Truncated: Invalid target plate {t}"}
             if not ((can_transfer := self._is_valid_transfer(s, t))[0]):
-                return self.state, PieGameEnv.ILLEGAL_ACTION_REWARD, True, {"TotalTurns": self.turns,
-                                                                            "TerminationReason": f"Invalid transfer: {s} {t}"}
+                return self.state, PieMakerEnv.ILLEGAL_ACTION_REWARD, False, True, {"TotalTurns": self.turns,
+                                                                                    "Status": f"Truncated: Invalid transfer: {s} {t}"}
 
             reward += can_transfer[1]
 
@@ -109,10 +109,10 @@ class PieGameEnv(gymnasium.Env):
 
         self.state = np.concatenate((self.sources.flatten(), self.targets.flatten(), self.meta_params))
         done = self.turns < 1000
-        return self.state, reward, done, info
+        return self.state, reward, done, False, {"TotalTurns": self.turns, "Status": "Terminated: Reached 1000 turns"}
 
     def reset(self, *, seed=None, options=None):
-        # Reset the environment state and return the initial observation
+        # Reset the environment state and return the initial observation and info
         # Run params
         self.T = int(input())
         self.S = int(input())
@@ -135,7 +135,9 @@ class PieGameEnv(gymnasium.Env):
         self.meta_params = np.array([self.S, self.T, self.C, self.N, self.P])
 
         self.state = np.concatenate((self.sources.flatten(), self.targets.flatten(), self.meta_params))
-        return self.state  # Return the initial state
+        return self.state, {
+            "StartState": {"sources": self.sources, "targets": self.targets, "S": self.S, "T": self.T, "C": self.C,
+                           "N": self.N, "P": self.P}}
 
     def close(self):
         # Send terminate action to console
@@ -149,7 +151,9 @@ class PieGameEnv(gymnasium.Env):
     '''
     Checks if source plate s can be transferred to target plate t. If transfer is valid, then returns the effective 
     reward obtained from the transfer. Also updates target flavor.
+    :returns bool, float
     '''
+
     def _is_valid_transfer(self, s, t):
         source_plate, target_plate = self.sources[s], self.targets[t]
         k = 0
@@ -164,13 +168,13 @@ class PieGameEnv(gymnasium.Env):
                 k += 1
                 target_count += 1
 
-                if self.target_flavor[t] == 0:   # if target fully empty
+                if self.target_flavor[t] == 0:  # if target fully empty
                     self.target_flavor[t] = source_plate[i]
                 elif self.target_flavor[t] > 0 and self.target_flavor[t] != source_plate[i]:
                     # if target has single flavor and is different from current source pie
                     self.target_flavor[t] = -1
 
-        reward = k
+        reward = k + 0.0
         if target_count == self.N:
             if self.target_flavor[t] > 0:
                 reward += self.N ** 2
@@ -199,6 +203,13 @@ class PieGameEnv(gymnasium.Env):
     #
     #     assert self.observation_space.contains(self.state)
     #     print("PieMaker Environment initialized successfully")
+
+
+# Env registration
+register(
+    id='PieMakerEnv-v0',
+    entry_point='piemaker:PieMakerEnv',
+)
 
 # # Main training loop
 # for episode in range(num_episodes):
