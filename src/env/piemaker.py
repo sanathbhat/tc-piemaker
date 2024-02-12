@@ -208,7 +208,7 @@ class PieMakerEnv(gym.Env):
 # Env registration
 register(
     id='PieMakerEnv-v0',
-    entry_point='piemaker:PieMakerEnv',
+    entry_point='src.env.piemaker:PieMakerEnv',
 )
 
 # # Main training loop

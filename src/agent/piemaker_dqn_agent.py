@@ -1,20 +1,24 @@
 import gymnasium as gym
+import src.env.piemaker
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from src.config.dqn_agent_config import PieMakerDQNConfig
 
+
 class PieMakerDQN:
     TRAINING_EPISODES = 1
     TRAINING_EPISODE_STEPS = 1000
+    TENSORBOARD_LOG_DIR = "./tensorboard_logs/"
+
     def __init__(self):
         self.env = gym.make("PieMakerEnv-v0")
         self.vec_env = DummyVecEnv([lambda: self.env])
         self.hyper_params = PieMakerDQNConfig.hyper_parameters
-        self.model = DQN(env=self.vec_env, verbose=1, **self.hyper_params)
+        self.model = DQN(env=self.vec_env, verbose=1, tensorboard_log=self.TENSORBOARD_LOG_DIR, **self.hyper_params)
 
     def train(self, episodes=TRAINING_EPISODES, episode_steps=TRAINING_EPISODE_STEPS):
-        self.model.learn(total_timesteps=episodes*episode_steps, log_interval=4)
+        self.model.learn(total_timesteps=episodes * episode_steps, log_interval=4)
         self.model.save("models/piemaker_dqn")
 
     def test(self):
@@ -31,9 +35,13 @@ class PieMakerDQN:
             if terminated or truncated:
                 return total_reward
 
+
 if __name__ == '__main__':
     agent = PieMakerDQN()
     epochs = 10
 
     for _ in range(epochs):
         agent.train()
+
+    total_reward = agent.test()
+    print(total_reward)
